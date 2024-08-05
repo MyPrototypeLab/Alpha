@@ -1,0 +1,60 @@
+import telebot
+import os
+from yt_dlp import YoutubeDL
+from pytube import YouTube
+
+# Token del bot de Telegram
+TOKEN = 'TOKEN DE TELEGRAM'
+bot = telebot.TeleBot(TOKEN)
+
+# Función para descargar y guardar el video en la máquina local
+def DownloadAndSaveVideo(link):
+    yt = YouTube(link)
+    stream = yt.streams.filter(progressive=True, file_extension='mp4').order_by('resolution').desc().first()
+    stream.download(filename='video_descargado')
+    print('¡Video descargado y guardado en la máquina local con éxito!')
+# Función para descargar y guardar el audio del video en la máquina local
+def DownloadAudio(link):
+    yt = YouTube(link)
+    stream = yt.streams.filter(only_audio=True).first()
+    try:
+        stream.download()
+    except:
+        print("Hubo un error al descargar el audio del video del URL proporcionado...")
+    print("¡Descarga del audio completada con éxito!")
+# Función para descargar y enviar el audio del video al chat con el bot
+def DownloadAudioAndSend(link, chat_id):
+    ydl_opts = {
+        'outtmpl': '%(title)s.%(ext)s',
+        'format': 'bestaudio/best',
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+    }
+    with YoutubeDL(ydl_opts) as ydl:
+        ydl.download([link])
+        audio_file_path = ydl.prepare_filename(ydl.extract_info(link))
+        audio_file_name = os.path.splitext(os.path.basename(audio_file_path))[0] + '.mp3'
+        audio_file_path = os.path.join(os.path.dirname(audio_file_path), audio_file_name)
+        with open(audio_file_path, 'rb') as audio:
+            bot.send_audio(chat_id, audio)
+        os.remove(audio_file_path)
+        
+        
+# Manejar los mensajes recibidos por el bot
+@bot.message_handler(func=lambda message: True)
+def handle_message(message):
+    chat_id = message.chat.id
+    if message.text.startswith('https://www.youtube.com/') or message.text.startswith('https://youtu.be/') or message.text.startswith('https://music.youtube.com/'):
+        try:
+            bot.reply_to(message, 'Descargando el video...')
+            DownloadAudioAndSend(message.text, chat_id)
+        except Exception as e:
+            bot.reply_to(message, f'Hubo un error: {str(e)}')
+    else:
+        bot.reply_to(message, 'Por favor envía una URL de YouTube válida.')
+
+# Iniciar el bot
+bot.polling()
